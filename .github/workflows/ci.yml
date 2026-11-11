@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check src tests scripts
+      - run: pytest -q
+      - name: P vs PID comparison
+        run: python scripts/compare_controllers.py
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t boiler-scada .
+      - name: Smoke test - server in container, client reads tags
+        run: |
+          docker run -d --name opcua --network host boiler-scada
+          sleep 5
+          docker run --rm --network host boiler-scada python opcua_client.py
